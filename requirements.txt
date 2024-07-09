@@ -1,0 +1,10 @@
+# requirements.txt
+
+gensim==4.3.2
+google-ai-generativelanguage==0.6.5
+google-generativeai==0.7.0
+pymilvus==2.2.1
+scrapy==2.11.2
+sentence-transformers==3.0.1
+streamlit==1.36.0
+nltk==3.8.1
