@@ -105,9 +105,11 @@ def main():
                 st.warning("No texts retrieved from Milvus.")
                 return
             try:
-                llm_response = llm_model.generate_content([(query, retrieved_texts[:10])])
+                documents = [{"text": text} for text in retrieved_texts]
+                prompt = f"for given query: {query} refer the paragraph and identify proper answer {documents[:5]}"
+                llm_response = llm_model.generate_content(prompt)
                 st.subheader("LLM Response:")
-                st.write(llm_response.text)
+                st.write(llm_response.text)  
             except Exception as e:
                 st.error(f"Error generating response from LLM: {e}")
         else:
