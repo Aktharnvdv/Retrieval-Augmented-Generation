@@ -3,22 +3,22 @@ import json
 from urllib.parse import urljoin, urlparse, urldefrag
 from scrapy.crawler import CrawlerProcess
 from scrapy.selector import Selector
-from multiprocessing import Process, Queue
+from scrapy.crawler import CrawlerProcess
 from scrapy.utils.project import get_project_settings
+from multiprocessing import Process
 
 class MySpider(scrapy.Spider):
     name = 'MySpider'
 
-    def __init__(self, start_url=None, domain=None, depth=1, result_queue=None, *args, **kwargs):
+    def __init__(self, start_url=None, domain=None, depth=1, *args, **kwargs):
         super(MySpider, self).__init__(*args, **kwargs)
         self.start_url = start_url
         self.allowed_domains = [domain]
         self.depth_limit = int(depth)
         self.scraped_items = []
-        self.result_queue = result_queue
         self.non_text_file_types = ['.png', '.jpg', '.jpeg', '.gif', '.pdf', '.doc', '.docx', '.xls', '.xlsx']
         self.page_count = 0
-        self.max_pages = 1000000000000000000
+        self.max_pages = 100
         self.visited_urls = set()
 
     def start_requests(self):
@@ -63,8 +63,6 @@ class MySpider(scrapy.Spider):
                     yield response.follow(sublink_url, callback=self.parse, meta={'depth': depth + 1})
 
     def closed(self, reason):
-        if self.result_queue:
-            self.result_queue.put(self.scraped_items)
         with open('scraped_data.json', 'w', encoding='utf-8') as f:
             json.dump(self.scraped_items, f, ensure_ascii=False)
 
@@ -88,26 +86,23 @@ class MySpider(scrapy.Spider):
         """Check if the URL is valid and starts with http or https."""
         return url.startswith('http://') or url.startswith('https://')
 
+
 def scrape_url(start_url, depth, result_queue):
-    process = CrawlerProcess(get_project_settings())
-    process.crawl(MySpider, start_url=start_url, domain=start_url.split('/')[2], depth=depth, result_queue=result_queue)
+    process = CrawlerProcess(settings={
+        'LOG_ENABLED': True,
+        'CONCURRENT_REQUESTS': 32,
+        'DOWNLOAD_DELAY': 0,
+        'REACTOR_THREADPOOL_MAXSIZE': 20,
+        'COOKIES_ENABLED': False,
+        'RETRY_ENABLED': False,
+        'REDIRECT_ENABLED': False,
+    })
+    process.crawl(MySpider, start_url=start_url, domain=start_url.split('/')[2], depth=depth,result_queue=result_queue)
     process.start()
+    
 
 def run_spider_multiprocessing(start_url, depth, result_queue):
     scrape_process = Process(target=scrape_url, args=(start_url, depth, result_queue))
     scrape_process.start()
     scrape_process.join()
-
-#def main():
-#    start_url = "https://docs.nvidia.com/cuda/"
-#    depth = 4
-#    result_queue = Queue()
-#    run_spider_multiprocessing(start_url, depth, result_queue)
-#    scraped_data = []
-#    while not result_queue.empty():
-#        scraped_data.extend(result_queue.get())
-#    with open('final_scraped_data.json', 'w', encoding='utf-8') as f:
-#        json.dump(scraped_data, f, ensure_ascii=False)
-
-#if __name__ == "__main__":
-#    main()
+    
