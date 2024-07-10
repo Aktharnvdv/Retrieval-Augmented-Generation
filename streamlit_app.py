@@ -5,7 +5,7 @@ from nltk.corpus import wordnet
 from sentence_transformers import SentenceTransformer
 from pymilvus import connections, Collection, utility
 from multiprocessing import Process, Queue
-from run_spider import run_spider_multiprocessing
+from my_spider import run_spider_multiprocessing
 import process_data
 import google.generativeai as genai
 
