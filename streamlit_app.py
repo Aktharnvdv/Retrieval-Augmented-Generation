@@ -105,7 +105,8 @@ def main():
     if st.button("Scrape"):
         st.info(f"Scraping {url} up to depth {depth}...")
         result_queue = Queue()
-        scrape_process = Process(target=run_spider_multiprocessing, args=(url, depth, result_queue))
+        scrape_process = Process(target=run_spider_multiprocessing,
+                                 args=(url, depth, result_queue))
         scrape_process.start()
         
         with st.spinner('Scraping in progress...'):
@@ -150,7 +151,7 @@ def main():
 
             try:
                 documents = [{"text": text} for text in ranked_texts[:20]]
-                prompt = f"For query: '{query}', refer to the following documents: {documents}"
+                prompt = f"For query: '{query}', refer to the following documents: {documents} answer the question with citation from given reference"
                 llm_response = llm_model.generate_content(prompt)
                 st.subheader("LLM Response:")
                 st.write(llm_response.text)
