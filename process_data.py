@@ -1,9 +1,15 @@
 import json
 from gensim import corpora, models
+import re
 from pymilvus import connections, FieldSchema, CollectionSchema, DataType, Collection, utility
-from sentence_transformers import SentenceTransformer
+import torch
+from gensim.utils import simple_preprocess
+import numpy as np
+import os
 
 def load_scraped_data(file_path):
+    print("--------loading scraped data-------------")
+    
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             scraped_data = json.load(f)
@@ -11,24 +17,44 @@ def load_scraped_data(file_path):
     except FileNotFoundError:
         return []
 
+def preprocess_text(text):
+
+    text = re.sub(r'\S*\d\S*', '', text).strip()
+    text = re.sub(r'\s+', ' ', text).strip()
+    return [word for word in simple_preprocess(text)]
+
 def chunk_by_topic_modeling(texts):
-    texts_tokenized = [text.split() for text in texts]
-    dictionary = corpora.Dictionary(texts_tokenized)
-    corpus = [dictionary.doc2bow(text) for text in texts_tokenized]
-    lda_model = models.LdaModel(corpus, num_topics=5, id2word=dictionary, passes=10)
+    print("-------- applying topic modelling on the text -------------")
+    
+    processed_texts = [preprocess_text(text) for text in texts]
+    dictionary = corpora.Dictionary(processed_texts)
+    corpus = [dictionary.doc2bow(text) for text in processed_texts]
+    lda_model = models.LdaModel(corpus, 
+                                num_topics=100, 
+                                id2word=dictionary, 
+                                passes=100)
     topic_chunks = []
-    for text in texts_tokenized:
+    
+    for text in processed_texts:
         bow = dictionary.doc2bow(text)
         topics = lda_model.get_document_topics(bow)
-        topic_chunks.append(" ".join(dictionary[word_id] for word_id, _ in topics))
+    
+        dominant_topic = max(topics, key=lambda x: x[1])[0]
+        topic_words = lda_model.show_topic(dominant_topic, topn=1000)
+        topic_chunks.append(" ".join([word for word, _ in topic_words]))
+    
     return topic_chunks, texts
 
 def save_embeddings(file_path, embeddings, urls, texts):
+    print("-------- saving the embeddings -------------")
+    
     data = [{"url": url, "embedding": embedding.tolist(), "text": text} for url, embedding, text in zip(urls, embeddings, texts)]
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 def load_embeddings(file_path):
+    print("-------- loading the embeddings -------------")
+    
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -40,13 +66,15 @@ def load_embeddings(file_path):
         return [], [], []
 
 def connect_milvus():
+    print("-------- connecting the milvus -------------")
+    
     connections.connect("default", host="localhost", port="19530")
     if utility.has_collection("topic_chunks"):
         utility.drop_collection("topic_chunks")
 
     fields = [
         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-        FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=384),
+        FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=768),
         FieldSchema(name="url", dtype=DataType.VARCHAR, max_length=65535),
         FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535)
     ]
@@ -59,12 +87,9 @@ def connect_milvus():
     return collection
 
 def insert_into_milvus(collection, embeddings, urls, texts):
-    entities = {
-        "embedding": embeddings,
-        "url": urls,
-        "text": [text[:65530] for text in texts]
-    }
-
+    print("-------- inserting into milvus -------------")
+    
+    entities = {"embedding": embeddings, "url": urls, "text": [text[:65530] for text in texts]}
     try:
         if entities["embedding"] and entities["url"] and entities["text"]:
             collection.insert([entities["embedding"], entities["url"], entities["text"]])
@@ -77,17 +102,29 @@ def insert_into_milvus(collection, embeddings, urls, texts):
         import traceback
         traceback.print_exc()
 
-def main():
-    scraped_data = load_scraped_data('scraped_data.json')
+def create_embeddings(texts, model, tokenizer, batch_size=8):
+    print("-------- creating embeddings -------------")
+    
+    embeddings = []
+    for i in range(0, len(texts), batch_size):
+        batch_texts = texts[i:i + batch_size]
+        inputs = tokenizer(batch_texts, return_tensors='pt', padding=True, truncation=True)
+        with torch.no_grad():
+            outputs = model(**inputs)
+        batch_embeddings = outputs.last_hidden_state[:, 0, :].cpu().numpy()
+        embeddings.append(batch_embeddings)
+    
+    return np.vstack(embeddings)
 
+def main(model, tokenizer):
+    scraped_data = load_scraped_data('scraped_data.json')
     if scraped_data:
         texts = [data['text'] for data in scraped_data]
         urls = [data['url'] for data in scraped_data]
-        _ , texts = chunk_by_topic_modeling(texts)
+        topic_chunks, texts = chunk_by_topic_modeling(texts)
         
-        model = SentenceTransformer('paraphrase-MiniLM-L6-v2', device='cpu')
-        embeddings = model.encode(texts)
-        save_embeddings('embeddings.json', embeddings, urls, texts)
+        embeddings = create_embeddings(topic_chunks, model, tokenizer)  
+        save_embeddings('embeddings.json', embeddings, urls, topic_chunks)
         
         print("Embeddings saved to embeddings.json successfully.")
         embeddings, urls, texts = load_embeddings('embeddings.json')
@@ -100,5 +137,6 @@ def main():
     else:
         print("No scraped data available.")
 
-if __name__ == "__main__":
-    main()
+
+#if __name__ == "__main__":
+#    main()

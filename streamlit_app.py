@@ -1,22 +1,26 @@
 import streamlit as st
 import json
-from urllib.parse import urlparse
 import nltk
-from nltk.corpus import wordnet
-from sentence_transformers import SentenceTransformer
+from nltk.corpus import wordnet, stopwords
+from nltk.tokenize import word_tokenize
 from pymilvus import connections, Collection, utility
 from multiprocessing import Process, Queue
 import google.generativeai as genai
 from my_spider import run_spider_multiprocessing
 import process_data
+from transformers import AutoTokenizer, AutoModel
+import bm25s
+import torch
+import os
 
-# Initialize nltk wordnet
-nltk.download('wordnet')
+nltk_data_path = os.path.join(os.path.expanduser("~"), "nltk_data")
+if not os.path.exists(nltk_data_path):
+    nltk.download('wordnet')
+    nltk.download('punkt')
+    nltk.download('stopwords')
 
-# Setup generative AI model (llm_model)
 GOOGLE_API_KEY = 'AIzaSyA6qVsNW-xyvf5ubUz0Ic02I-wsLiM1KHc'
 genai.configure(api_key=GOOGLE_API_KEY)
-
 llm_model = genai.GenerativeModel(
     model_name='gemini-1.5-flash-latest',
     safety_settings=[
@@ -27,8 +31,20 @@ llm_model = genai.GenerativeModel(
     ]
 )
 
-# Function to load previously scraped data
+@st.cache_resource
+def load_bert_model():
+    print("-------- loading bert model -------------")
+    
+    tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+    model = AutoModel.from_pretrained('bert-base-uncased')
+    model.eval()  
+    return tokenizer, model
+
+tokenizer, model = load_bert_model()
+
 def load_scraped_data():
+    print("-------- loading the scraped data -------------")
+    
     try:
         with open('scraped_data.json', 'r', encoding='utf-8') as f:
             scraped_data = json.load(f)
@@ -36,45 +52,54 @@ def load_scraped_data():
     except FileNotFoundError:
         return []
 
-# Function for query expansion using nltk wordnet
 def query_expansion(query):
+    print("-------- query expansion -------------")
+    
     synonyms = set()
     for syn in wordnet.synsets(query):
         for lemma in syn.lemmas():
             synonyms.add(lemma.name())
     return list(synonyms)
 
-# Function for BERT-based document retrieval from Milvus
-def bert_based_retrieval(collection, query):
-    model = SentenceTransformer('paraphrase-MiniLM-L6-v2', device='cpu')
-    query_embedding = model.encode(query)
+def bert_based_retrieval(collection, query, tokenizer, model):
+    print("-------- executing DRP bert method -------------")
+    
+    inputs = tokenizer(query, return_tensors='pt', truncation=True, padding=True)
+    with torch.no_grad():
+        query_embedding = model(**inputs).last_hidden_state.mean(dim=1).cpu().numpy()
     search_params = {"metric_type": "IP", "params": {"nprobe": 10}}
-    results = collection.search([query_embedding], "embedding", param=search_params, limit=100)
-    retrieved_doc_ids = results[0].ids
-    return retrieved_doc_ids
+    results = collection.search([query_embedding[0]], 
+                                "embedding", 
+                                param=search_params, 
+                                limit=100, 
+                                output_fields=["text"])
+    retrieved_texts = [result.entity.get("text") for result in results[0]]
+    return retrieved_texts
 
-# Function to retrieve texts from Milvus based on document IDs
-def retrieve_texts_from_milvus(collection, doc_ids):
-    texts = []
-    try:
-        batch_size = 100
-        for i in range(0, len(doc_ids), batch_size):
-            batch_ids = doc_ids[i:i + batch_size]
-            expr = f'id in {batch_ids}'
-            entities = collection.query(expr, output_fields=["text"])
-            for entity in entities:
-                texts.append(entity['text'])
-    except Exception as e:
-        st.error(f"Error retrieving texts from Milvus: {e}")
-    return texts
+def bm25_re_rank(retrieved_texts, query):
+    print("-------- applying bm25 on the retrieved chunks -------------")
+    
+    stop_words = set(stopwords.words('english'))
+    corpus_tokens = [word_tokenize(doc.lower()) for doc in retrieved_texts]
+    corpus_tokens = [[word for word in tokens if word.isalnum() and word not in stop_words] for tokens in corpus_tokens]
+    
+    query_tokens = word_tokenize(query.lower())
+    query_tokens = [word for word in query_tokens if word.isalnum() and word not in stop_words]
+    
+    retriever = bm25s.BM25()
+    retriever.index(corpus_tokens)
+    
+    results, scores = retriever.retrieve(query_tokens, k=len(retrieved_texts))
+    
+    ranked_texts = [retrieved_texts[idx] for idx in results[0]]
+    return ranked_texts
 
-# Main Streamlit application function
 def main():
     st.title("Retrieval-Augmented Generation")
+    print("-------- Retrieval-Augmented Generation -------------------")
 
     url = st.text_input("Enter a URL to scrape:", "https://docs.nvidia.com/cuda/")
-    depth = st.slider("Depth to scrape:", 1, 5, 3)
-
+    depth = 5
     result_queue = Queue()
 
     if st.button("Scrape"):
@@ -89,8 +114,7 @@ def main():
         scraped_data = load_scraped_data()
         
         if scraped_data:
-            process_data.main()
-            
+            process_data.main(model , tokenizer)
             st.success("Data processed and stored in Milvus successfully.")
         else:
             st.warning("No data scraped.")
@@ -110,15 +134,22 @@ def main():
             expanded_query_terms = query_expansion(query)
             expanded_query = " ".join(expanded_query_terms)
 
-            retrieved_doc_ids = bert_based_retrieval(collection, expanded_query)
-            retrieved_texts = retrieve_texts_from_milvus(collection, retrieved_doc_ids)
-
+            retrieved_texts = bert_based_retrieval(collection, 
+                                                   expanded_query, 
+                                                   tokenizer, 
+                                                   model)
             if not retrieved_texts:
-                st.warning("No texts retrieved from Milvus.")
+                st.warning("No texts retrieved from BERT.")
+                return
+
+            ranked_texts = bm25_re_rank(retrieved_texts, query)
+
+            if not ranked_texts:
+                st.warning("No texts retrieved after BM25 re-ranking.")
                 return
 
             try:
-                documents = [{"text": text} for text in retrieved_texts[:20]]
+                documents = [{"text": text} for text in ranked_texts[:20]]
                 prompt = f"For query: '{query}', refer to the following documents: {documents}"
                 llm_response = llm_model.generate_content(prompt)
                 st.subheader("LLM Response:")

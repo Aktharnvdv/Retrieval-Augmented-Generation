@@ -4,7 +4,6 @@ from urllib.parse import urljoin, urlparse, urldefrag
 from scrapy.crawler import CrawlerProcess
 from scrapy.selector import Selector
 from scrapy.crawler import CrawlerProcess
-from scrapy.utils.project import get_project_settings
 from multiprocessing import Process
 
 class MySpider(scrapy.Spider):
@@ -18,7 +17,7 @@ class MySpider(scrapy.Spider):
         self.scraped_items = []
         self.non_text_file_types = ['.png', '.jpg', '.jpeg', '.gif', '.pdf', '.doc', '.docx', '.xls', '.xlsx']
         self.page_count = 0
-        self.max_pages = 100
+        self.max_pages = 50
         self.visited_urls = set()
 
     def start_requests(self):
@@ -90,9 +89,9 @@ class MySpider(scrapy.Spider):
 def scrape_url(start_url, depth, result_queue):
     process = CrawlerProcess(settings={
         'LOG_ENABLED': True,
-        'CONCURRENT_REQUESTS': 32,
+        'CONCURRENT_REQUESTS': 1024,
         'DOWNLOAD_DELAY': 0,
-        'REACTOR_THREADPOOL_MAXSIZE': 20,
+        'REACTOR_THREADPOOL_MAXSIZE': 200,
         'COOKIES_ENABLED': False,
         'RETRY_ENABLED': False,
         'REDIRECT_ENABLED': False,
