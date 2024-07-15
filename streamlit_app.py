@@ -21,7 +21,7 @@ if not os.path.exists(nltk_data_path):
     nltk.download('stopwords')
 
 # Configure Google API key and LLM model
-GOOGLE_API_KEY = 'AIzaSyA6qVsNW-xyvf5ubUz0Ic02I-wsLiM1KHc'
+GOOGLE_API_KEY = '*************************************'
 genai.configure(api_key=GOOGLE_API_KEY)
 llm_model = genai.GenerativeModel(
     model_name='gemini-1.5-flash-latest',
