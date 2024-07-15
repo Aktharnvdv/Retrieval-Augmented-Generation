@@ -25,9 +25,7 @@
 
 ### Web Crawling
      
-Web crawler was developed using Scrapy, which by default scrapes the Nvidia documentation website. It extracts text from the main page as well as sublinks, scraping data up to a depth of 5.
-
-    web crawler (my_spider.py)
+Web crawler was developed using Scrapy, which by default scrapes the Nvidia documentation website. It extracts text from the main page as well as sublinks, scraping data up to a depth of 5.web crawler (my_spider.py)
 
 ### Data Chunking and Vector Database Creation
 
