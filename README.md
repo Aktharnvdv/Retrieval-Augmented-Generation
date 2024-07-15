@@ -17,8 +17,8 @@
 
 ## Set up the repository
 
-    git clone https://github.com/Aktharnvdv/Milvus_scrapy_RAG.git
-    cd Milvus_scrapy_RAG
+    git clone https://github.com/Aktharnvdv/Retrieval-Augmented-Generation.git
+    cd Retrieval-Augmented-Generation
     ./setup.sh
 
 ## Task Description
