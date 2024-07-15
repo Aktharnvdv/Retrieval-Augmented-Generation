@@ -31,7 +31,7 @@ Web crawler was developed using Scrapy, which by default scrapes the Nvidia docu
 
 Milvus is the vector database used and similarity based chunking is used to chunk the scraped data.
  
-- Converted the texts into chunks using topic modeling.
+- Converted the texts into chunks using similarity based method.
 - Chunks were converted into embedding vectors using BERT models.
 - Created a vector database using Milvus.
 - Stored embedding vectors using FLAT (Flat) and IVF (Inverted File) indexing methods.
@@ -39,7 +39,6 @@ Milvus is the vector database used and similarity based chunking is used to chun
 
     Process and chunk the scraped data (process_data.py)
     Configure and create Milvus vector database (pymilvus)
-    sudo docker-compose up -d
 
 ### Retrieval and Re-ranking
 
