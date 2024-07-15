@@ -185,8 +185,8 @@ def main():
                 return
 
             try:
-                documents = [{"text": text} for text in ranked_texts[:20]]
-                prompt = f"For query: '{query}', refer to the following documents: {documents} answer the question with citation from given reference"
+                documents = [{"text": text} for text in ranked_texts]
+                prompt = f"For query: '{query}', refer to the following documents: {documents} answer the question with citation from given reference and detailed information."
                 llm_response = llm_model.generate_content(prompt)
                 st.subheader("LLM Response:")
                 st.write(llm_response.text)
