@@ -8,6 +8,14 @@ import numpy as np
 import os
 
 def load_scraped_data(file_path):
+    """Loads scraped data from a JSON file.
+
+    Args:
+        file_path (str): The path to the JSON file containing scraped data.
+
+    Returns:
+        list: A list of scraped data items.
+    """
     print("--------loading scraped data-------------")
     
     try:
@@ -18,12 +26,29 @@ def load_scraped_data(file_path):
         return []
 
 def preprocess_text(text):
+    """Cleans and preprocesses the input text.
 
+    Args:
+        text (str): The text to preprocess.
+
+    Returns:
+        list: A list of cleaned and tokenized words.
+    """
     text = re.sub(r'\S*\d\S*', '', text).strip()
     text = re.sub(r'\s+', ' ', text).strip()
     return [word for word in simple_preprocess(text)]
 
 def chunk_by_topic_modeling(texts):
+    """Applies topic modeling to chunk the input texts into topics.
+
+    Args:
+        texts (list): A list of texts to process.
+
+    Returns:
+        tuple: A tuple containing:
+            - list: List of topic words for each text.
+            - list: Original texts processed.
+    """
     print("-------- applying topic modelling on the text -------------")
     
     processed_texts = [preprocess_text(text) for text in texts]
@@ -46,6 +71,14 @@ def chunk_by_topic_modeling(texts):
     return topic_chunks, texts
 
 def save_embeddings(file_path, embeddings, urls, texts):
+    """Saves embeddings, URLs, and texts to a JSON file.
+
+    Args:
+        file_path (str): The path to the JSON file to save data.
+        embeddings (np.ndarray): The embeddings to save.
+        urls (list): The corresponding URLs.
+        texts (list): The corresponding texts.
+    """
     print("-------- saving the embeddings -------------")
     
     data = [{"url": url, "embedding": embedding.tolist(), "text": text} for url, embedding, text in zip(urls, embeddings, texts)]
@@ -53,6 +86,17 @@ def save_embeddings(file_path, embeddings, urls, texts):
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 def load_embeddings(file_path):
+    """Loads embeddings, URLs, and texts from a JSON file.
+
+    Args:
+        file_path (str): The path to the JSON file containing embeddings.
+
+    Returns:
+        tuple: A tuple containing:
+            - list: Loaded embeddings.
+            - list: Corresponding URLs.
+            - list: Corresponding texts.
+    """
     print("-------- loading the embeddings -------------")
     
     try:
@@ -66,6 +110,11 @@ def load_embeddings(file_path):
         return [], [], []
 
 def connect_milvus():
+    """Connects to the Milvus database and creates a collection if it does not exist.
+
+    Returns:
+        pymilvus.Collection: The Milvus collection object.
+    """
     print("-------- connecting the milvus -------------")
     
     connections.connect("default", host="localhost", port="19530")
@@ -87,6 +136,14 @@ def connect_milvus():
     return collection
 
 def insert_into_milvus(collection, embeddings, urls, texts):
+    """Inserts embeddings, URLs, and texts into the specified Milvus collection.
+
+    Args:
+        collection (pymilvus.Collection): The Milvus collection to insert data into.
+        embeddings (list): The embeddings to insert.
+        urls (list): The corresponding URLs.
+        texts (list): The corresponding texts.
+    """
     print("-------- inserting into milvus -------------")
     
     entities = {"embedding": embeddings, "url": urls, "text": [text[:65530] for text in texts]}
@@ -103,6 +160,17 @@ def insert_into_milvus(collection, embeddings, urls, texts):
         traceback.print_exc()
 
 def create_embeddings(texts, model, tokenizer, batch_size=8):
+    """Creates embeddings for the provided texts using the specified model and tokenizer.
+
+    Args:
+        texts (list): List of texts to create embeddings for.
+        model (torch.nn.Module): The model used to generate embeddings.
+        tokenizer (transformers.PreTrainedTokenizer): The tokenizer for the model.
+        batch_size (int, optional): The number of texts to process in each batch. Default is 8.
+
+    Returns:
+        np.ndarray: The combined embeddings for all texts.
+    """
     print("-------- creating embeddings -------------")
     
     embeddings = []
@@ -117,6 +185,12 @@ def create_embeddings(texts, model, tokenizer, batch_size=8):
     return np.vstack(embeddings)
 
 def main(model, tokenizer):
+    """Main function to process scraped data, create embeddings, and insert them into Milvus.
+
+    Args:
+        model (torch.nn.Module): The model used for embedding creation.
+        tokenizer (transformers.PreTrainedTokenizer): The tokenizer for the model.
+    """
     scraped_data = load_scraped_data('scraped_data.json')
     if scraped_data:
         texts = [data['text'] for data in scraped_data]
@@ -136,7 +210,6 @@ def main(model, tokenizer):
             print("No embeddings available to insert.")
     else:
         print("No scraped data available.")
-
 
 #if __name__ == "__main__":
 #    main()

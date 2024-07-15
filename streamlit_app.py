@@ -13,12 +13,14 @@ import bm25s
 import torch
 import os
 
+# Ensure NLTK data is downloaded
 nltk_data_path = os.path.join(os.path.expanduser("~"), "nltk_data")
 if not os.path.exists(nltk_data_path):
     nltk.download('wordnet')
     nltk.download('punkt')
     nltk.download('stopwords')
 
+# Configure Google API key and LLM model
 GOOGLE_API_KEY = 'AIzaSyA6qVsNW-xyvf5ubUz0Ic02I-wsLiM1KHc'
 genai.configure(api_key=GOOGLE_API_KEY)
 llm_model = genai.GenerativeModel(
@@ -33,6 +35,12 @@ llm_model = genai.GenerativeModel(
 
 @st.cache_resource
 def load_bert_model():
+    """Loads and returns the BERT tokenizer and model.
+
+    Returns:
+        tokenizer (transformers.AutoTokenizer): The BERT tokenizer.
+        model (transformers.AutoModel): The BERT model.
+    """
     print("-------- loading bert model -------------")
     
     tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
@@ -43,6 +51,11 @@ def load_bert_model():
 tokenizer, model = load_bert_model()
 
 def load_scraped_data():
+    """Loads previously scraped data from 'scraped_data.json'.
+
+    Returns:
+        list: The list of scraped data items.
+    """
     print("-------- loading the scraped data -------------")
     
     try:
@@ -53,6 +66,14 @@ def load_scraped_data():
         return []
 
 def query_expansion(query):
+    """Expands the query using synonyms from WordNet.
+
+    Args:
+        query (str): The query string to expand.
+
+    Returns:
+        list: List of expanded query terms.
+    """
     print("-------- query expansion -------------")
     
     synonyms = set()
@@ -62,6 +83,17 @@ def query_expansion(query):
     return list(synonyms)
 
 def bert_based_retrieval(collection, query, tokenizer, model):
+    """Executes BERT-based retrieval on a Milvus collection.
+
+    Args:
+        collection (pymilvus.Collection): The Milvus collection object.
+        query (str): The query string.
+        tokenizer (transformers.AutoTokenizer): The BERT tokenizer.
+        model (transformers.AutoModel): The BERT model.
+
+    Returns:
+        list: List of retrieved texts.
+    """
     print("-------- executing DRP bert method -------------")
     
     inputs = tokenizer(query, return_tensors='pt', truncation=True, padding=True)
@@ -77,6 +109,15 @@ def bert_based_retrieval(collection, query, tokenizer, model):
     return retrieved_texts
 
 def bm25_re_rank(retrieved_texts, query):
+    """Applies BM25 re-ranking on retrieved texts.
+
+    Args:
+        retrieved_texts (list): List of texts retrieved from BERT.
+        query (str): The query string.
+
+    Returns:
+        list: List of ranked texts.
+    """
     print("-------- applying bm25 on the retrieved chunks -------------")
     
     stop_words = set(stopwords.words('english'))
@@ -95,6 +136,7 @@ def bm25_re_rank(retrieved_texts, query):
     return ranked_texts
 
 def main():
+    """Main function to run the Streamlit application for Retrieval-Augmented Generation."""
     st.title("Retrieval-Augmented Generation")
     print("-------- Retrieval-Augmented Generation -------------------")
 
