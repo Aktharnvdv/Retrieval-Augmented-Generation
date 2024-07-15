@@ -29,7 +29,7 @@ Web crawler was developed using Scrapy, which by default scrapes the Nvidia docu
 
 ### Data Chunking and Vector Database Creation
 
-Milvus is the vector database used and topic modeling is implemented to chunk the scraped data using the Gensim library.
+Milvus is the vector database used and similarity based chunking is used to chunk the scraped data.
  
 - Converted the texts into chunks using topic modeling.
 - Chunks were converted into embedding vectors using BERT models.

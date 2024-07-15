@@ -100,11 +100,7 @@ def bert_based_retrieval(collection, query, tokenizer, model):
     with torch.no_grad():
         query_embedding = model(**inputs).last_hidden_state.mean(dim=1).cpu().numpy()
     search_params = {"metric_type": "IP", "params": {"nprobe": 10}}
-    results = collection.search([query_embedding[0]], 
-                                "embedding", 
-                                param=search_params, 
-                                limit=100, 
-                                output_fields=["text"])
+    results = collection.search([query_embedding[0]], "embedding", param=search_params, limit=100, output_fields=["text"])
     retrieved_texts = [result.entity.get("text") for result in results[0]]
     return retrieved_texts
 
