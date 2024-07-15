@@ -6,6 +6,7 @@ import torch
 from gensim.utils import simple_preprocess
 import numpy as np
 import os
+from sklearn.cluster import KMeans
 
 def load_scraped_data(file_path):
     """Loads scraped data from a JSON file.
@@ -38,37 +39,30 @@ def preprocess_text(text):
     text = re.sub(r'\s+', ' ', text).strip()
     return [word for word in simple_preprocess(text)]
 
-def chunk_by_topic_modeling(texts):
-    """Applies topic modeling to chunk the input texts into topics.
+def chunk_by_similarity(sentences, model, tokenizer, n_clusters=10):
+    """Chunks text into clusters based on semantic similarity using a BERT model.
 
     Args:
-        texts (list): A list of texts to process.
+        sentences (list): A list of sentences to chunk.
+        model (torch.nn.Module): The model used to generate embeddings.
+        tokenizer (transformers.PreTrainedTokenizer): The tokenizer for the model.
+        n_clusters (int): The number of clusters to create.
 
     Returns:
-        tuple: A tuple containing:
-            - list: List of topic words for each text.
-            - list: Original texts processed.
+        dict: A dictionary where keys are cluster labels and values are lists of sentences in each cluster.
     """
-    print("-------- applying topic modelling on the text -------------")
-    
-    processed_texts = [preprocess_text(text) for text in texts]
-    dictionary = corpora.Dictionary(processed_texts)
-    corpus = [dictionary.doc2bow(text) for text in processed_texts]
-    lda_model = models.LdaModel(corpus, 
-                                num_topics=100, 
-                                id2word=dictionary, 
-                                passes=100)
-    topic_chunks = []
-    
-    for text in processed_texts:
-        bow = dictionary.doc2bow(text)
-        topics = lda_model.get_document_topics(bow)
-    
-        dominant_topic = max(topics, key=lambda x: x[1])[0]
-        topic_words = lda_model.show_topic(dominant_topic, topn=1000)
-        topic_chunks.append(" ".join([word for word, _ in topic_words]))
-    
-    return topic_chunks, texts
+    def get_embeddings(sentences):
+        inputs = tokenizer(sentences, return_tensors='pt', padding=True, truncation=True)
+        with torch.no_grad():
+            outputs = model(**inputs)
+        return outputs.last_hidden_state[:, 0, :].cpu().numpy()
+
+    embeddings = get_embeddings(sentences)
+    kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(embeddings)
+    clusters = {i: [] for i in range(n_clusters)}
+    for idx, label in enumerate(kmeans.labels_):
+        clusters[label].append(sentences[idx])
+    return clusters
 
 def save_embeddings(file_path, embeddings, urls, texts):
     """Saves embeddings, URLs, and texts to a JSON file.
@@ -195,10 +189,17 @@ def main(model, tokenizer):
     if scraped_data:
         texts = [data['text'] for data in scraped_data]
         urls = [data['url'] for data in scraped_data]
-        topic_chunks, texts = chunk_by_topic_modeling(texts)
         
-        embeddings = create_embeddings(topic_chunks, model, tokenizer)  
-        save_embeddings('embeddings.json', embeddings, urls, topic_chunks)
+        # Use chunk_by_similarity instead of chunk_by_topic_modeling
+        clusters = chunk_by_similarity(texts, model, tokenizer, n_clusters=10)
+        
+        # Flatten clusters into a list of texts
+        chunked_texts = []
+        for cluster in clusters.values():
+            chunked_texts.extend(cluster)
+        
+        embeddings = create_embeddings(chunked_texts, model, tokenizer)  
+        save_embeddings('embeddings.json', embeddings, urls, chunked_texts)
         
         print("Embeddings saved to embeddings.json successfully.")
         embeddings, urls, texts = load_embeddings('embeddings.json')
@@ -210,6 +211,7 @@ def main(model, tokenizer):
             print("No embeddings available to insert.")
     else:
         print("No scraped data available.")
+
 
 #if __name__ == "__main__":
 #    main()

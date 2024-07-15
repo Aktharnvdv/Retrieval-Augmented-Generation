@@ -147,8 +147,7 @@ def main():
     if st.button("Scrape"):
         st.info(f"Scraping {url} up to depth {depth}...")
         result_queue = Queue()
-        scrape_process = Process(target=run_spider_multiprocessing,
-                                 args=(url, depth, result_queue))
+        scrape_process = Process(target=run_spider_multiprocessing,args=(url, depth, result_queue))
         scrape_process.start()
         
         with st.spinner('Scraping in progress...'):
@@ -164,6 +163,7 @@ def main():
 
     st.subheader("Retrieve Documents")
     query = st.text_input("Enter your query:")
+    
     if st.button("Retrieve"):
         if query:
             connections.connect("default", host="localhost", port="19530")
@@ -176,11 +176,8 @@ def main():
 
             expanded_query_terms = query_expansion(query)
             expanded_query = " ".join(expanded_query_terms)
-
-            retrieved_texts = bert_based_retrieval(collection, 
-                                                   expanded_query, 
-                                                   tokenizer, 
-                                                   model)
+            retrieved_texts = bert_based_retrieval(collection, expanded_query, tokenizer, model)
+            
             if not retrieved_texts:
                 st.warning("No texts retrieved from BERT.")
                 return
@@ -197,6 +194,7 @@ def main():
                 llm_response = llm_model.generate_content(prompt)
                 st.subheader("LLM Response:")
                 st.write(llm_response.text)
+                print("result published:")
             except Exception as e:
                 st.error(f"Error generating response from LLM: {e}")
         else:
